@@ -1,2 +1,0 @@
-o Simplify model/ less layers (cop/iot)
-o Less neurons

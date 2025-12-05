@@ -98,9 +98,8 @@ model.compile(
 print(model.summary())
 
 early = EarlyStopping(monitor="val_loss", patience=20, restore_best_weights=True, verbose=1)
-checkpoint = ModelCheckpoint("./models/best_model.keras", monitor="val_loss", save_best_only=True, verbose=1)
 reduce_lr = ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=8, verbose=1)
-callbacks = [early, checkpoint, reduce_lr]
+callbacks = [early, reduce_lr]
 
 class_weights = class_weight.compute_class_weight(
     class_weight='balanced',
@@ -177,11 +176,6 @@ plt.show()
 # Classification report
 report = classification_report(y_test, y_pred, digits=4)
 print("Classification report:\n", report)
-
-# Save the final model and scaler
-model.save("./models/final_model.keras", include_optimizer=False)
-joblib.dump(scaler, "./scaler/scaler.save")
-
 
 # --------------------------------------------------
 # FINAL SUMMARY (all accuracies in %)

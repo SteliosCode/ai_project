@@ -1,3 +1,6 @@
+import os
+import random
+import tensorflow as tf
 import pandas as pd
 import numpy as np
 from sklearn.metrics import classification_report
@@ -11,6 +14,16 @@ from sklearn.metrics import confusion_matrix
 import joblib
 import seaborn as sns
 from sklearn.utils import class_weight
+from keras.models import load_model
+import json
+
+#SEED = 42
+#random.seed(SEED)
+#np.random.seed(SEED)
+#tf.random.set_seed(SEED)
+#os.environ['TF_DETERMINISTIC_OPS'] = '1'
+#os.environ['PYTHONHASHSEED'] = str(SEED)
+
 
 column_names = [
     "age",
@@ -55,8 +68,9 @@ inputs = [
 
 #separation x=input and y=target 
 X = clean_data[inputs]
-#y = clean_data["class_attbr"] low accuracy change to:
-y = clean_data["class_attbr"].astype(int)
+#y = clean_data["class_attbr"]                     #51% & 64%overal
+y = clean_data["class_attbr"].astype(int)          #51% & 64%overal
+#y = (clean_data["class_attbr"] > 0).astype(int)   #77% & 95%overal
 
 print("Input data: \n", X.values)
 print("Target data: \n", y.values)
@@ -82,10 +96,11 @@ model = keras.Sequential([
 
         layers.InputLayer(input_shape=(X_train.shape[1],), name="input_layer"),
 
-        layers.Dense(30, activation="relu", name="hidden_layer1", kernel_initializer="he_normal"),
+        layers.Dense(22, activation="relu", name="hidden_layer1", kernel_initializer="he_normal"),
+        #layers.Dropout(0.5), #w/0.5 --> 51,64 w/0.2 --> 68,53
+        #layers.BatchNormalization(),
         layers.Dense(20, activation="relu", name="hidden_layer2" , kernel_initializer="he_normal"),
-        layers.Dense(10, activation="relu", name="hidden_layer3" , kernel_initializer="he_normal"),
-
+        
         layers.Dense(5, activation="softmax", name="output_layer")
     ])
 
@@ -98,8 +113,9 @@ model.compile(
 print(model.summary())
 
 early = EarlyStopping(monitor="val_loss", patience=20, restore_best_weights=True, verbose=1)
+checkpoint = ModelCheckpoint("./models/best_model.keras", monitor="val_loss", save_best_only=True, verbose=1)
 reduce_lr = ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=8, verbose=1)
-callbacks = [early, reduce_lr]
+callbacks = [early, checkpoint, reduce_lr]
 
 class_weights = class_weight.compute_class_weight(
     class_weight='balanced',
@@ -177,6 +193,11 @@ plt.show()
 report = classification_report(y_test, y_pred, digits=4)
 print("Classification report:\n", report)
 
+# Save the final model and scaler
+model.save("./models/final_model.keras", include_optimizer=False)
+joblib.dump(scaler, "./scaler/scaler.save")
+
+
 # --------------------------------------------------
 # FINAL SUMMARY (all accuracies in %)
 # --------------------------------------------------
@@ -198,3 +219,14 @@ print(f"Validation Accuracy:     {val_acc_pct:.2f}%")
 print(f"Test Accuracy:           {test_acc_pct:.2f}%")
 print(f"Overall Accuracy (CR):   {overall_acc_pct:.2f}%")
 print("================================================\n")
+
+
+#for layer in model.layers:
+#    print(layer.name, layer.get_weights())
+
+
+#model = load_model("./models/best_model.keras")
+#model.summary()
+#print(json.dumps(model.get_config(), indent=4))
+#pred = model.predict(X_test)
+#pred_class = np.argmax(pred, axis=1)

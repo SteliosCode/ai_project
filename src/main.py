@@ -16,6 +16,7 @@ import seaborn as sns
 from sklearn.utils import class_weight
 from keras.models import load_model
 import json
+from imblearn.over_sampling import SMOTE
 
 #SEED = 42
 #random.seed(SEED)
@@ -25,65 +26,47 @@ import json
 #os.environ['PYTHONHASHSEED'] = str(SEED)
 
 
-column_names = [
-    "age",
-    "sex",
-    "cp",
-    "trestbps",
-    "chol",
-    "fbs",
-    "restecg",
-    "thalach",
-    "exang",
-    "oldpeak",
-    "slope",
-    "ca",
-    "thal",
-    "class_attbr"]
+column_names = ["age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exang", "oldpeak", "slope", "ca", "thal", "class_attbr"]
 
-#get and clean data
+import pandas as pd 
+
+# load and clean data
 data = pd.read_csv("./data/processed.cleveland.data", header=None, names=column_names, na_values="?")
 clean_data = data.dropna() 
 
-#data and clean data showcase
-print("Original Data: \n", data)
-print("Clean Data: \n", clean_data)
+# showcase results
+print("Original Data: ", data.shape)
+print("Clean Data: ", clean_data.shape)
 
 
-inputs = [
-    "age",
-    "sex",
-    "cp",
-    "trestbps",
-    "chol",
-    "fbs",
-    "restecg",
-    "thalach",
-    "exang",
-    "oldpeak",
-    "slope",
-    "ca",
-    "thal"]
+inputs = ["age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exang", "oldpeak", "slope", "ca", "thal"]
+outputs = ["class_attbr"]
 
-
-#separation x=input and y=target 
+#separation x = input and y = target 
 X = clean_data[inputs]
-#y = clean_data["class_attbr"]                     #51% & 64%overal
-y = clean_data["class_attbr"].astype(int)          #51% & 64%overal
-#y = (clean_data["class_attbr"] > 0).astype(int)   #77% & 95%overal
+y = clean_data[outputs].astype(int)       
+#y = (clean_data["class_attbr"] > 0).astype(int)   
 
-print("Input data: \n", X.values)
-print("Target data: \n", y.values)
 
 #train/validate/test split BEFORE scaling
-X_train_raw, X_temp_raw, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+X_train_raw, X_temp_raw, y_train, y_temp = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 X_val_raw, X_test_raw, y_val, y_test = train_test_split(X_temp_raw, y_temp, test_size=0.50, random_state=42, stratify=y_temp)
+
+
+# Apply SMOTE only on training data
+
+sm = SMOTE(random_state=42, k_neighbors=3)
+X_train_raw_sm, y_train_sm = sm.fit_resample(X_train_raw, y_train)
+
+print("Before SMOTE:", np.bincount(y_train))
+print("After SMOTE:", np.bincount(y_train_sm))
 
 #scaling AFTER split — fit only on training data
 scaler = StandardScaler()
-X_train = scaler.fit_transform(X_train_raw)
+X_train = scaler.fit_transform(X_train_raw_sm)
 X_val   = scaler.transform(X_val_raw)
 X_test  = scaler.transform(X_test_raw)
+
 
 print("Training shape: \n", X_train.shape)
 print("Validation shape: \n", X_val.shape)
@@ -96,18 +79,20 @@ model = keras.Sequential([
 
         layers.InputLayer(input_shape=(X_train.shape[1],), name="input_layer"),
 
-        layers.Dense(22, activation="relu", name="hidden_layer1", kernel_initializer="he_normal"),
-        #layers.Dropout(0.5), #w/0.5 --> 51,64 w/0.2 --> 68,53
+        layers.Dense(22, activation="relu", name="hidden_layer1", kernel_initializer="he_normal",kernel_regularizer=keras.regularizers.l2(0.01)),
+        layers.Dropout(0.2), #w/0.5 --> 51,64 w/0.2 --> 68,53
         #layers.BatchNormalization(),
-        layers.Dense(20, activation="relu", name="hidden_layer2" , kernel_initializer="he_normal"),
+        layers.Dense(19, activation="relu", name="hidden_layer2", kernel_initializer="he_normal"),
+        #layers.Dense(4, activation="relu", name="hidden_layer3", kernel_initializer="he_normal"),
+
         
         layers.Dense(5, activation="softmax", name="output_layer")
     ])
 
 model.compile(
-    optimizer = keras.optimizers.Adam(learning_rate=0.001), #adam adapts learning rate
+    optimizer = keras.optimizers.Adam(learning_rate = 0.001), #adam adapts learning rate
     loss = "sparse_categorical_crossentropy", # categorical crossentropy (0-4)
-    metrics = ["accuracy"]                   #metric for classification
+    metrics = ["accuracy"]                   # metric for classification
 )
 
 print(model.summary())
@@ -117,28 +102,14 @@ checkpoint = ModelCheckpoint("./models/best_model.keras", monitor="val_loss", sa
 reduce_lr = ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=8, verbose=1)
 callbacks = [early, checkpoint, reduce_lr]
 
-class_weights = class_weight.compute_class_weight(
-    class_weight='balanced',
-    classes=np.unique(y_train),
-    y=y_train
-)
-
-unique_classes = np.unique(y_train)
-class_weights = {cls: weight for cls, weight in zip(unique_classes, class_weights)}
-print("Class weights:", class_weights)
-
-
-
 history = model.fit(
-    X_train, y_train,
+    X_train, y_train_sm,
     validation_data=(X_val, y_val),
-    epochs=200,
+    epochs=300,
     batch_size=32,
     callbacks=callbacks,
-    class_weight=class_weights,
     verbose=1
 )
-
 
 train_loss = history.history["loss"][-1]
 train_acc  = history.history["accuracy"][-1]
@@ -220,13 +191,3 @@ print(f"Test Accuracy:           {test_acc_pct:.2f}%")
 print(f"Overall Accuracy (CR):   {overall_acc_pct:.2f}%")
 print("================================================\n")
 
-
-#for layer in model.layers:
-#    print(layer.name, layer.get_weights())
-
-
-#model = load_model("./models/best_model.keras")
-#model.summary()
-#print(json.dumps(model.get_config(), indent=4))
-#pred = model.predict(X_test)
-#pred_class = np.argmax(pred, axis=1)

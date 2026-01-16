@@ -40,12 +40,13 @@ print("Clean Data: ", clean_data.shape)
 
 
 inputs = ["age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exang", "oldpeak", "slope", "ca", "thal"]
-outputs = ["class_attbr"]
 
-#separation x = input and y = target 
+
+#separation x=input and y=target 
 X = clean_data[inputs]
-y = clean_data[outputs].astype(int)       
-#y = (clean_data["class_attbr"] > 0).astype(int)   
+#y = clean_data["class_attbr"]                     #51% & 64%overal
+y = clean_data["class_attbr"].astype(int)          #51% & 64%overal
+#y = (clean_data["class_attbr"] > 0).astype(int)   #77% & 95%overal
 
 
 #train/validate/test split BEFORE scaling
